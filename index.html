@@ -126,6 +126,14 @@ input.pill:focus{box-shadow:0 0 0 2px var(--ink)}
 .extcard button{margin-left:auto;border:none;border-radius:999px;padding:10px 16px;font:800 14px Nunito,sans-serif;cursor:pointer;background:var(--teal);color:#fff;flex:0 0 auto}
 .extcard button.off{background:#e95656}
 .steps{margin:10px 0 0;padding-left:20px;font-weight:600;line-height:1.6}
+.ledwrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.ledboard{display:grid;grid-template-columns:repeat(5,46px);gap:8px;background:#2c2f3a;padding:16px;border-radius:18px;touch-action:none;box-shadow:inset 0 -4px 0 rgba(0,0,0,.4)}
+.ledboard button{width:46px;height:46px;border-radius:8px;border:none;background:#4a4d5a;cursor:pointer;padding:0;transition:background .08s}
+.ledboard button.on{background:#ff3b3b;box-shadow:0 0 12px #ff3b3b}
+.ledboard button:focus-visible{outline:3px solid #ffd23f}
+.prow .lico{width:40px;min-width:40px;height:40px;padding:3px}
+@media (max-width:640px){.ledboard{grid-template-columns:repeat(5,38px);gap:6px;padding:12px}.ledboard button{width:38px;height:38px}}
+.ledit{cursor:pointer;border-radius:6px;outline:2px dashed rgba(255,255,255,.6);outline-offset:2px}
 .lnk{color:#1278a0;font-weight:800;text-decoration:underline;text-underline-offset:2px}
 .lnk:hover{color:#0b5674}
 .pages{width:118px;flex:0 0 auto;background:var(--panel);border-radius:18px;box-shadow:0 3px 0 var(--line);display:flex;flex-direction:column;padding:10px 8px;gap:10px;overflow:auto;align-items:center}
@@ -339,6 +347,7 @@ const DEFS={
  mbA:{cat:'mb',hat:1,name:'Al presionar el botón A de la micro:bit',ic:()=>mbBtnIc('A')},
  mbB:{cat:'mb',hat:1,name:'Al presionar el botón B de la micro:bit',ic:()=>mbBtnIc('B')},
  mbIcon:{cat:'mb',p:'icon',d:0,name:'Mostrar un ícono en la micro:bit (tocá el dibujo para cambiarlo)',ic:b=>ledIc((MBI[num(b.val)]||MBI[0]).p)},
+ mbDraw:{cat:'mb',p:'leds',d:'0010001110111110111001010',name:'Mostrar mi dibujo en la micro:bit (tocá el dibujo para editarlo)',ic:b=>ledIc(String(b.val||'').padEnd(25,'0'))},
  mbNum:{cat:'mb',p:'num',d:5,name:'Mostrar un número en la micro:bit',ic:()=>ledIc(digitPat('7'))},
  mbClear:{cat:'mb',name:'Apagar la pantalla de la micro:bit',ic:()=>ledIc('0'.repeat(25))},
  mbNote:{cat:'mb',p:'num',d:1,name:'Tocar una nota en la micro:bit (1 a 8)',ic:()=>S('<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5" fill="#fff"/><circle cx="17.5" cy="16" r="2.5" fill="#fff"/>','width="26" height="26"')},
@@ -496,7 +505,8 @@ function makeBlockEl(b,live){
  const el=document.createElement('div');
  el.className='blk'+(d.hat?' hat':'')+(d.tail?' tail':'')+(d.wrap?' rep':'');
  el.style.setProperty('--c',cat.color);el.dataset.id=b.id;el.title=d.name;
- const icon=`<span class="ic${live&&(d.p==='speed'||d.p==='icon')?' param cyc':''}">${d.ic(b)}</span>`;
+ const icon=`<span class="ic${live&&(d.p==='speed'||d.p==='icon')?' param cyc':''}${live&&d.p==='leds'?' param ledit':''}">${d.ic(b)}</span>`;
+ if(d.p==='leds')el.dataset.leds=String(b.val||'').split('').filter(c=>c==='1').length;
  if(d.p==='icon')el.dataset.icn=(MBI[num(b.val)]||MBI[0]).n;
  if(d.wrap){
   const head=document.createElement('div');head.className='rep-head';head.innerHTML=icon;addParam(head,b,live);el.appendChild(head);
@@ -567,6 +577,8 @@ canvas.addEventListener('input',e=>{
  const loc=findLoc(inp.closest('.blk').dataset.id);if(loc){loc.arr[loc.idx].val=inp.value;save()}
 });
 canvas.addEventListener('click',e=>{
+ const le=e.target.closest('.ledit');
+ if(le){const loc=findLoc(le.closest('.blk').dataset.id);if(loc)openLedEditor(loc.arr[loc.idx]);return}
  const p=e.target.closest('.cyc');if(!p)return;
  const loc=findLoc(p.closest('.blk').dataset.id);if(!loc)return;
  const b=loc.arr[loc.idx];
@@ -707,6 +719,7 @@ async function exec(t,b){
   case'speed':sp.speed=Math.max(0,Math.min(2,num(v)));return;
   case'send':fire('recv',null,num(v));return nextFrame();
   case'mbIcon':MB.show((MBI[num(v)]||MBI[0]).p);return sleep(t,400);
+  case'mbDraw':MB.show(String(v||'').padEnd(25,'0'));return sleep(t,400);
   case'mbNum':{const s=String(Math.round(num(v)));if(s.length===1){MB.show(digitPat(s));return sleep(t,400)}for(const ch of s){if(!t.alive)return;MB.show(digitPat(ch));await sleep(t,450);MB.clear();await sleep(t,90)}return}
   case'mbClear':MB.clear();return nextFrame();
   case'mbNote':SFX.note(num(v));return sleep(t,420);
@@ -902,6 +915,7 @@ function labelFor(t){
   const v=own.querySelector(':scope>input,:scope>.pill');if(v)s+=': '+(v.value!==undefined?v.value:v.textContent);
   const dot=own.querySelector(':scope>.dot');if(dot)s+=', color '+MSGN[+dot.dataset.ci];
   if(blk.dataset.icn)s+=': '+blk.dataset.icn;
+  if(blk.dataset.leds!==undefined){const n=+blk.dataset.leds;s=s.replace(/\s*\(.*$/,'')+', con '+n+(n===1?' luz prendida':' luces prendidas')}
   const emo=own.querySelector('.emo');if(emo&&SPEEDN[emo.textContent])s+=': '+SPEEDN[emo.textContent];
   if(blk.classList.contains('rep')){const n=blk.querySelectorAll('.rep-inner .blk').length;s+=n?', con '+n+(n===1?' bloque adentro':' bloques adentro'):', vacío'}
   return{el:blk,text:(blk.closest('.palette')?'Bloque ':'')+s};
@@ -973,6 +987,7 @@ function exportPy(){
    const d=DEFS[b.type],v=b.val;if(d.hat)continue;
    switch(b.type){
     case'mbIcon':out.push(I+'display.show(Image.'+(MBI[num(v)]||MBI[0]).py+')');break;
+    case'mbDraw':{const s=String(v||'').padEnd(25,'0').slice(0,25).replace(/1/g,'9').replace(/[^9]/g,'0');out.push(I+'display.show(Image("'+[0,5,10,15,20].map(i=>s.slice(i,i+5)).join(':')+'"))');break}
     case'mbNum':out.push(I+'display.scroll('+Math.round(num(v))+')');break;
     case'mbClear':out.push(I+'display.clear()');break;
     case'mbNote':case'note':out.push(I+`music.play('${NOTE[Math.max(1,Math.min(8,Math.round(num(v))))-1]}:4')`);break;
@@ -1010,6 +1025,27 @@ function exportPy(){
  openModal('Programa descargado ✔',`<p style="margin:0;font-weight:600">Se descargó <b>${esc(fileBase())}-microbit.py</b>. Para pasarlo a la micro:bit:</p><ol class="steps"><li>Abrí <a class="lnk" href="https://python.microbit.org/" target="_blank" rel="noopener" title="Abrir el editor de Python de micro:bit en una pestaña nueva">python.microbit.org ↗</a>.</li><li>Tocá <b>Abrir…</b> y elegí el archivo descargado.</li><li>Conectá la micro:bit por USB y tocá <b>Enviar a micro:bit</b>, o tocá <b>Guardar</b> para obtener el archivo <b>.hex</b> y arrastrarlo a la micro:bit.</li></ol>`);
 }
 $('#mbExport').onclick=exportPy;
+const ledSvg=p=>{let o='';for(let i=0;i<25;i++)o+=`<rect x="${(i%5)*4.6+1}" y="${Math.floor(i/5)*4.6+1}" width="3.6" height="3.6" rx=".8" fill="${p[i]==='1'?'#ff3b3b':'#4a4d5a'}"/>`;return`<svg viewBox="0 0 24 24" width="100%" height="100%" style="background:#2c2f3a;border-radius:5px">${o}</svg>`};
+function openLedEditor(b){
+ let p=String(b.val||'').padEnd(25,'0').slice(0,25).split('');
+ const cells=p.map((c,i)=>`<button data-i="${i}" class="${c==='1'?'on':''}" aria-label="Luz fila ${Math.floor(i/5)+1}, columna ${i%5+1}"></button>`).join('');
+ openModal('Dibujá en las luces de la micro:bit',`<div class="ledwrap"><div class="ledboard" id="ledB">${cells}</div><div class="ptools"><p style="margin:0;font-weight:700">Tocá o arrastrá el dedo sobre las luces para prenderlas o apagarlas.</p><div class="prow"><button id="lClr">Apagar todo</button><button id="lAll">Prender todo</button><button id="lInv">Invertir</button></div><p style="margin:4px 0 0;font-weight:700">Empezar desde un ícono:</p><div class="prow" id="lIco">${MBI.map((m,i)=>`<button data-k="${i}" title="${m.n}" class="lico">${ledSvg(m.p)}</button>`).join('')}</div></div></div><div class="actions"><button id="lNo">Cancelar</button><button class="primary" id="lOk" style="background:var(--teal)">Listo</button></div>`);
+ const board=$('#ledB'),btns=[...board.children];
+ const paint=()=>{btns.forEach((x,i)=>{x.classList.toggle('on',p[i]==='1');x.setAttribute('aria-label',`Luz fila ${Math.floor(i/5)+1}, columna ${i%5+1}, ${p[i]==='1'?'prendida':'apagada'}`)});MB.show(p.join(''))};
+ let val=null;
+ const hit=e=>{const el=document.elementFromPoint(e.clientX,e.clientY);return el&&el.parentElement===board?el:null};
+ board.onpointerdown=e=>{const el=hit(e);if(!el)return;e.preventDefault();const i=+el.dataset.i;val=p[i]==='1'?'0':'1';p[i]=val;paint();if(READER.on)READER.say(val==='1'?'Prendida':'Apagada')};
+ board.onpointermove=e=>{if(val===null)return;const el=hit(e);if(!el)return;const i=+el.dataset.i;if(p[i]!==val){p[i]=val;paint()}};
+ const up=()=>{val=null};board.onpointerup=up;board.onpointerleave=up;board.onpointercancel=up;
+ board.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target.dataset.i){e.preventDefault();const i=+e.target.dataset.i;p[i]=p[i]==='1'?'0':'1';paint()}};
+ $('#lClr').onclick=()=>{p=p.map(()=>'0');paint()};
+ $('#lAll').onclick=()=>{p=p.map(()=>'1');paint()};
+ $('#lInv').onclick=()=>{p=p.map(c=>c==='1'?'0':'1');paint()};
+ $('#lIco').onclick=e=>{const x=e.target.closest('[data-k]');if(!x)return;p=MBI[+x.dataset.k].p.split('');paint()};
+ $('#lNo').onclick=closeModal;
+ $('#lOk').onclick=()=>{b.val=p.join('');closeModal();renderScripts();save();if(READER.on)READER.say('Dibujo guardado')};
+ paint();
+}
 
 /* ---------- Guardar y abrir proyectos ---------- */
 const fileBase=()=>(P.name||'mi-proyecto').trim().replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'-')||'mi-proyecto';
